@@ -121,6 +121,6 @@ if prompt := st.chat_input(f"Ask about patient {patient_id}'s history..."):
             except Exception as e:
                 bot_reply = f"⚠️ Unexpected error: {e}"
 
-    bot_reply += "\n\n*⚕️ AI-generated summary. Do not use for diagnostic purposes.*"
+    # Note: disclaimer footer is already embedded in the API response — do not append again
     st.session_state.messages.append({"role": "assistant", "content": bot_reply})
     st.chat_message("assistant").write(bot_reply)
