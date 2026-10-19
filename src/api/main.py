@@ -51,8 +51,8 @@ async def _gemini_llm_response(context: str, question: str) -> str:
         max_output_tokens=512,
     )
 
-    # Try models in order; retry each up to 3 times with backoff on 503
-    model_chain = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    # Confirmed working with AQ. key type (tested live)
+    model_chain = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
     last_error = None
 
     for model in model_chain:
