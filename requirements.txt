@@ -1,0 +1,40 @@
+# Secure EHR Insight — Clinical Validator
+# Author: Pradeep
+# Python >= 3.10 required. Install with:
+#   pip install -r requirements.txt
+#   pip install nemoguardrails==0.24.1 --ignore-requires-python
+
+# ── Web / API ─────────────────────────────────────────────────────────────────
+fastapi==0.141.1
+uvicorn==0.53.0
+streamlit==1.64.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg==3.3.5
+psycopg-binary==3.3.5
+sqlalchemy==2.0.54
+pgvector==0.3.6
+
+# ── AI / ML ───────────────────────────────────────────────────────────────────
+sentence-transformers==6.0.1
+huggingface-hub==1.32.0
+torch==2.14.0
+transformers==5.17.0
+# NOTE: nemoguardrails caps at Python <3.14 in metadata but runs fine on 3.14
+# Install separately: pip install nemoguardrails==0.24.1 --ignore-requires-python
+# nemoguardrails==0.24.1
+
+# ── PII Redaction ─────────────────────────────────────────────────────────────
+presidio-analyzer==2.2.364
+presidio-anonymizer==2.2.364
+spacy==3.8.16
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv==1.2.3
+requests==2.34.2
+pandas==3.0.5
+numpy==2.4.6
+# Testing
+pytest==8.3.5
+httpx==0.28.1
