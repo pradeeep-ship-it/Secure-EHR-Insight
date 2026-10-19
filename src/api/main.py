@@ -20,8 +20,43 @@ app = FastAPI(title="Zero-Trust Clinical RAG API — by Pradeep")
 # Global state to hold our heavy ML models so they only load once at startup
 middleware = {}
 
-DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-LLM_ENABLED = bool(DEEPSEEK_KEY and not DEEPSEEK_KEY.startswith("your_"))
+DEEPSEEK_KEY  = os.getenv("DEEPSEEK_API_KEY", "")
+GEMINI_KEY    = os.getenv("GEMINI_API_KEY", "")
+LLM_ENABLED   = bool(DEEPSEEK_KEY and not DEEPSEEK_KEY.startswith("your_"))
+GEMINI_ENABLED = bool(GEMINI_KEY and not GEMINI_KEY.startswith("your_"))
+
+
+async def _gemini_llm_response(context: str, question: str) -> str:
+    """Call Google Gemini Flash for a real clinical natural-language answer.
+    The context has already been redacted by Presidio — no PII reaches the LLM."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_KEY)
+
+    system_instruction = (
+        "You are a clinical decision-support assistant. "
+        "You will be given de-identified EHR records (PII already removed by Presidio). "
+        "Answer the clinician's question concisely, citing only what is in the context. "
+        "Never speculate beyond the provided data. "
+        "Always end with: ⚕️ AI-generated summary. Do not use for diagnostic purposes."
+    )
+
+    prompt = (
+        f"De-identified Clinical Context:\n{context}\n\n"
+        f"Clinician Question: {question}"
+    )
+
+    response = await client.aio.models.generate_content(
+        model="gemini-3.8-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.2,
+            max_output_tokens=512,
+        ),
+    )
+    return response.text
 
 
 async def _mock_llm_response(context: str, question: str) -> str:
@@ -137,7 +172,7 @@ async def health_check():
     """Liveness probe — confirms API and all middleware are loaded."""
     return {
         "status": "healthy",
-        "llm_mode": "live" if LLM_ENABLED else "demo_mock",
+        "llm_mode": "deepseek" if LLM_ENABLED else ("gemini-3.8-flash" if GEMINI_ENABLED else "demo_mock"),
         "auth_enabled": _AUTH_ENABLED,
         "middleware_loaded": list(middleware.keys()),
     }
@@ -237,11 +272,13 @@ async def process_chat(request: ChatRequest):
         nemo_history = [{"role": msg.role, "content": msg.content} for msg in request.messages[:-1]]
         nemo_history.append({"role": "user", "content": augmented_prompt})
 
-        # 6. Route through Guardrails (or mock if no API key)
+        # 6. Route through LLM: DeepSeek (NeMo) > Gemini Flash > Smart Mock
         rails = middleware["rails"]
         if rails:
             response = await rails.generate_async(messages=nemo_history)
             llm_response = response['content']
+        elif GEMINI_ENABLED:
+            llm_response = await _gemini_llm_response(safe_context, latest_question)
         else:
             llm_response = await _mock_llm_response(safe_context, latest_question)
 

@@ -38,3 +38,4 @@ numpy==2.4.6
 # Testing
 pytest==8.3.5
 httpx==0.28.1
+google-genai>=1.0.0
