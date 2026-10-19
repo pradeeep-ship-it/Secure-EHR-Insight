@@ -28,7 +28,7 @@ GEMINI_ENABLED = bool(GEMINI_KEY and not GEMINI_KEY.startswith("your_"))
 
 async def _gemini_llm_response(context: str, question: str) -> str:
     """Call Google Gemini Flash for a real clinical natural-language answer.
-    The context has already been redacted by Presidio — no PII reaches the LLM."""
+    Retries with exponential backoff on 503; falls back to mock on persistent failure."""
     from google import genai
     from google.genai import types
 
@@ -41,22 +41,40 @@ async def _gemini_llm_response(context: str, question: str) -> str:
         "Never speculate beyond the provided data. "
         "Always end with: ⚕️ AI-generated summary. Do not use for diagnostic purposes."
     )
-
     prompt = (
         f"De-identified Clinical Context:\n{context}\n\n"
         f"Clinician Question: {question}"
     )
-
-    response = await client.aio.models.generate_content(
-        model="gemini-3.8-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.2,
-            max_output_tokens=512,
-        ),
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        temperature=0.2,
+        max_output_tokens=512,
     )
-    return response.text
+
+    # Try models in order; retry each up to 3 times with backoff on 503
+    model_chain = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    last_error = None
+
+    for model in model_chain:
+        for attempt in range(3):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
+                return response.text
+            except Exception as e:
+                err = str(e)
+                last_error = err
+                if "503" in err or "UNAVAILABLE" in err or "high demand" in err:
+                    wait = 2 ** attempt          # 1s, 2s, 4s
+                    await asyncio.sleep(wait)
+                    continue                      # retry same model
+                else:
+                    break                        # non-503 error → try next model
+
+    # All models exhausted → graceful fallback to structured mock
+    print(f"WARNING: Gemini unavailable ({last_error[:80]}...) — falling back to mock")
+    return await _mock_llm_response(context, question)
 
 
 async def _mock_llm_response(context: str, question: str) -> str:
