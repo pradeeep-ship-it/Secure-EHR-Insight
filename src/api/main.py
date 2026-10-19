@@ -25,14 +25,49 @@ LLM_ENABLED = bool(DEEPSEEK_KEY and not DEEPSEEK_KEY.startswith("your_"))
 
 
 async def _mock_llm_response(context: str, question: str) -> str:
-    """Fallback when no LLM API key is configured. Returns the redacted context
-    so the full Presidio + pgvector pipeline is still demonstrable."""
-    return (
-        "[DEMO MODE — LLM not configured]\n\n"
-        f"Redacted clinical context retrieved for your query '{question}':\n\n"
-        f"{context}\n\n"
-        "Add a real DEEPSEEK_API_KEY to .env to enable natural-language answers."
-    )
+    """Smart mock that parses retrieved RAG context and produces a structured
+    clinical summary — fully demonstrable without an LLM API key."""
+    import re
+
+    # --- Extract unique values from the redacted context records ---
+    drugs     = list(dict.fromkeys(re.findall(r"Drug:\s*([^\(,]+)", context)))
+    diagnoses = list(dict.fromkeys(re.findall(r"Diagnosis:\s*([^\n,D]+?)(?=\s*Drug:|$)", context)))
+    events    = list(dict.fromkeys(re.findall(r"Event:\s*([^\s,<][^,]*?)(?=,\s*Test:|$)", context)))
+    tests     = list(dict.fromkeys(re.findall(r"Test:\s*([^,]+)", context)))
+    comments  = list(dict.fromkeys(re.findall(r"Comments:\s*([^,]+)", context)))
+
+    def clean(lst):
+        return [x.strip() for x in lst if x.strip() and "<" not in x]
+
+    drugs     = clean(drugs)
+    diagnoses = clean(diagnoses)
+    events    = clean(events)
+    tests     = clean(tests)
+    comments  = clean(comments)
+
+    lines = ["**📋 Clinical Summary  (Demo Mode — Presidio + pgvector pipeline active)**", ""]
+
+    if drugs:
+        lines.append(f"**💊 Medications:** {', '.join(drugs)}")
+    if diagnoses:
+        lines.append(f"**🩺 Diagnosis:** {', '.join(diagnoses)}")
+    if events:
+        lines.append(f"**📅 Encounter Types:** {', '.join(set(events))}")
+    if tests:
+        lines.append(f"**🧪 Lab Tests:** {', '.join(tests)}")
+    if comments:
+        lines.append(f"**📝 Lab Results:** {comments[0]}")
+
+    lines += [
+        "",
+        f"*Query: \"{question}\"*",
+        "",
+        "> ℹ️ PII redacted by Microsoft Presidio · Context retrieved via pgvector semantic search · "
+        "Add `DEEPSEEK_API_KEY` to `.env` for full natural-language answers.",
+        "",
+        "⚕️ *AI-generated summary. Do not use for diagnostic purposes.*"
+    ]
+    return "\n".join(lines)
 
 
 @app.on_event("startup")

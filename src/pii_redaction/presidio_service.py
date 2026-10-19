@@ -40,7 +40,7 @@ class ClinicalPIIRedactor:
             text=raw_text,
             entities=self.target_entities,
             language='en',
-            score_threshold=0.4 
+            score_threshold=0.65  # raised from 0.4 — prevents false positives on clinical terms
         )
         
         anonymized_result = self.anonymizer.anonymize(
